@@ -2,6 +2,12 @@
 echo Installing PDF Processor...
 echo.
 
+REM Check if Python is installed and show which one
+echo Checking Python installation...
+python --version
+where python
+echo.
+
 REM Check if Python is installed
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -13,7 +19,15 @@ if errorlevel 1 (
 
 REM Install required packages
 echo Installing required packages...
-pip install PyQt5 pandas PyInstaller
+python -m pip install --upgrade pip
+python -m pip install PyQt5==5.15.10 pandas==2.2.1 PyInstaller pdfplumber==0.10.3 Flask==3.0.2 python-dotenv==1.0.1
+
+REM Verify installation
+echo.
+echo Verifying package installation...
+python -c "import pdfplumber; print('pdfplumber version:', pdfplumber.__version__)"
+python -c "import PyQt5; print('PyQt5 version:', PyQt5.QtCore.QT_VERSION_STR)"
+echo.
 
 REM Create the executable
 echo Creating executable...

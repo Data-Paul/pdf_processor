@@ -32,9 +32,10 @@ class PDFProcessor:
         self.logger = logging.getLogger(__name__)
 
     def flatten_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.applymap(
-            lambda x: str(x).replace('\n', ' ').strip() if isinstance(x, str) else x
-        )
+        # Convert all columns to string and apply the cleaning function
+        for col in df.columns:
+            df[col] = df[col].map(lambda x: str(x).replace('\n', ' ').strip() if isinstance(x, str) else x)
+        return df
 
     def safe_filename(self, name: str) -> str:
         replacements = {
