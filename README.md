@@ -11,15 +11,21 @@ Before running the installation script, please ensure you have:
    - **Important**: During installation, check "Add Python to PATH"
    - Verify installation by opening a command prompt and typing `python --version`
 
-2. Windows 10 or later operating system
+2. Visual Studio Build Tools 2022
+   - Download from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/)
+   - During installation, select "Desktop development with C++"
+   - This is required for compiling some Python packages
+
+3. Windows 10 or later operating system
 
 ## Installation
 
-The application comes with two batch files for easy installation and building:
+The application comes with two batch files for easy installation and building. Both scripts will automatically create the necessary `build` and `dist` folders if they don't exist.
 
 ### 1. First-time Installation (install.bat)
 
 This script will:
+- Create necessary folders (`build` and `dist`)
 - Check if Python is installed
 - Install all required Python packages:
   - PyQt5 (v5.15.10) - For the graphical user interface
@@ -31,9 +37,20 @@ This script will:
 - Create the executable in the `dist` folder
 
 To install:
-1. Double-click `install.bat`
-2. Wait for the installation to complete
-3. The executable will be created in the `dist` folder
+1. Make sure you have Visual Studio Build Tools installed
+2. Run `install.bat` as administrator
+3. Wait for the installation to complete
+4. The executable will be created in the `dist` folder
+
+### Alternative Installation (if you encounter build errors)
+
+If you encounter build errors during installation, try these steps:
+
+1. Run `install_alternative.bat` as administrator
+   - This script will create necessary folders
+   - Install pre-built wheels for numpy and pandas
+   - Install other required packages
+   - Create the executable
 
 ### 2. Rebuilding the Application (build.bat)
 
@@ -67,9 +84,17 @@ The application will create:
 If you encounter any issues:
 
 1. Make sure Python is properly installed and added to PATH
-2. Try running `install.bat` again
-3. Check the `pdf_processor.log` file for error messages
-4. Ensure you have write permissions in the output directory
+2. Ensure Visual Studio Build Tools are installed
+3. Try running `install.bat` as administrator
+4. If build errors persist, try the Alternative Installation method
+5. Check the `pdf_processor.log` file for error messages
+6. Ensure you have write permissions in the output directory
+
+Common Issues:
+- "Unknown compiler(s)" error: Install Visual Studio Build Tools
+- "Permission denied": Run as administrator
+- "Module not found": Try the Alternative Installation method
+- Missing folders: The installation scripts will create them automatically
 
 ## Development
 

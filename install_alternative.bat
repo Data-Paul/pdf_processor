@@ -1,5 +1,5 @@
 @echo off
-echo Installing PDF Processor...
+echo Installing PDF Processor (Alternative Method)...
 echo.
 
 REM Create necessary folders if they don't exist
@@ -23,10 +23,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Install required packages
+REM Install required packages using pre-built wheels
 echo Installing required packages...
 python -m pip install --upgrade pip
-python -m pip install PyQt5==5.15.10 pandas==2.2.1 PyInstaller pdfplumber==0.10.3 Flask==3.0.2 python-dotenv==1.0.1
+python -m pip install --only-binary :all: numpy pandas
+python -m pip install PyQt5==5.15.10 pdfplumber==0.10.3 Flask==3.0.2 python-dotenv==1.0.1 PyInstaller
 
 REM Verify installation
 echo.
