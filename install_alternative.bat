@@ -33,8 +33,14 @@ REM Verify installation
 echo.
 echo Verifying package installation...
 python -c "import pdfplumber; print('pdfplumber version:', pdfplumber.__version__)"
-python -c "import PyQt5; print('PyQt5 version:', PyQt5.QtCore.QT_VERSION_STR)"
+python -c "from PyQt5 import QtWidgets; print('PyQt5 installed successfully')"
 echo.
+
+REM Create spec file if it doesn't exist
+if not exist "pdf_processor.spec" (
+    echo Creating spec file...
+    python -m PyInstaller --name pdf_processor src/main.py
+)
 
 REM Create the executable
 echo Creating executable...
