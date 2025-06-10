@@ -10,9 +10,8 @@ import logging
 class PDFProcessor:
     TABLE_TYPES = {
         "education": ["Beginn", "Ende", "Ausbildung", "Institution"],
-        "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung","Allg Beschreibung"],
+        "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung", "Allg Beschreibung"],
         "skills": ["Gruppe", "Name", "Einstufung"],
-        "person_info": ["Name", "Familienname", "Geburtsdatum", "Nationalität","Erlernter Beruf","Barcode"],
         "traits": ["Persönliche Eigenschaften"]
     }
 
@@ -77,6 +76,8 @@ class PDFProcessor:
     def extract_logical_tables(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         logical_tables = {}
         headers = df.iloc[0].astype(str).str.strip().fillna("").tolist()
+        
+        # Map both person types to person_info
         if "Name" in headers and "Geburtsdatum" in headers:
             logical_tables["person_info"] = df
         elif "Erlernter Beruf" in headers or "Barcode" in headers:
@@ -120,22 +121,54 @@ class PDFProcessor:
             generated_files = []
 
             previous_classification = None
+            previous_table_type = None
 
             for df in tables:
                 table_type = self.classify_table_enhanced(df, previous_classification)
-                df.columns = df.iloc[0]
-                df = df[1:].copy()
+                
+                # Check if this is a continuation table
+                is_continuation = (table_type == previous_classification and 
+                                 table_type in ["work_experience", "education"] and
+                                 self._looks_like_data_not_header(df.iloc[0].astype(str).str.strip().tolist()))
+                
+                if is_continuation:
+                    # For continuation tables, DON'T set first row as headers
+                    # Just use the data as-is, but we need to match column structure
+                    if table_store[table_type]:
+                        # Get column structure from previous table of same type
+                        previous_df = table_store[table_type][-1]
+                        expected_cols = len(previous_df.columns)
+                        
+                        # Adjust current table to match column count
+                        if len(df.columns) != expected_cols:
+                            # Pad or trim columns to match
+                            while len(df.columns) < expected_cols:
+                                df[f'col_{len(df.columns)}'] = ''
+                            df = df.iloc[:, :expected_cols]
+                        
+                        # Set same column names as previous table
+                        df.columns = previous_df.columns
+                    else:
+                        # Fallback: use generic column names
+                        df.columns = [f'col_{i}' for i in range(len(df.columns))]
+                else:
+                    # Normal processing for regular tables (including first table of each type)
+                    df.columns = df.iloc[0]
+                    df = df[1:].copy()
 
                 if table_type == "unknown":
                     logical_splits = self.extract_logical_tables(df)
                     for subtype, subdf in logical_splits.items():
-                        subdf.columns = subdf.iloc[0]
-                        subdf = subdf[1:].copy()
+                        if not is_continuation:  # Only set headers for non-continuation
+                            subdf.columns = subdf.iloc[0]
+                            subdf = subdf[1:].copy()
                         table_store[subtype].append(subdf)
                 else:
                     table_store[table_type].append(df)
                 
                 previous_classification = table_type
+                if not is_continuation:
+                    previous_table_type = table_type
 
             for table_type, dfs in table_store.items():
                 if dfs:
