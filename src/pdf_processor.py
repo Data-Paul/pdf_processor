@@ -10,9 +10,10 @@ import logging
 class PDFProcessor:
     TABLE_TYPES = {
         "education": ["Beginn", "Ende", "Ausbildung", "Institution"],
-        "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung"],
+        "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung","Allg Beschreibung"],
         "skills": ["Gruppe", "Name", "Einstufung"],
-        "person_info": ["Name", "Familienname", "Geburtsdatum", "Nationalität"]
+        "person_info": ["Name", "Familienname", "Geburtsdatum", "Nationalität","Erlernter Beruf","Barcode"],
+        "traits": ["Persönliche Eigenschaften"]
     }
 
     def __init__(self, input_dir: str, output_dir: str):
@@ -79,9 +80,9 @@ class PDFProcessor:
         if "Name" in headers and "Geburtsdatum" in headers:
             logical_tables["person_info"] = df
         elif "Erlernter Beruf" in headers or "Barcode" in headers:
-            logical_tables["job_info"] = df
+            logical_tables["person_info"] = df
         elif "Persönliche Eigenschaften" in headers:
-            logical_tables["traits_table"] = df
+            logical_tables["traits"] = df
         else:
             logical_tables["unknown"] = df
         return logical_tables
@@ -118,8 +119,10 @@ class PDFProcessor:
             table_store: Dict[str, List[pd.DataFrame]] = defaultdict(list)
             generated_files = []
 
+            previous_classification = None
+
             for df in tables:
-                table_type = self.classify_table(df)
+                table_type = self.classify_table_enhanced(df, previous_classification)
                 df.columns = df.iloc[0]
                 df = df[1:].copy()
 
@@ -131,6 +134,8 @@ class PDFProcessor:
                         table_store[subtype].append(subdf)
                 else:
                     table_store[table_type].append(df)
+                
+                previous_classification = table_type
 
             for table_type, dfs in table_store.items():
                 if dfs:
@@ -176,4 +181,77 @@ class PDFProcessor:
         for filename in os.listdir(self.input_dir):
             if filename.endswith(".pdf"):
                 results[filename] = self.process_pdf(filename)
-        return results 
+        return results
+
+    def _looks_like_data_not_header(self, row_list: List[str]) -> bool:
+        """Detect if a 'header' row is actually data"""
+        patterns = []
+        
+        # Check if mostly empty (common for continuation tables)
+        empty_count = sum(1 for cell in row_list if str(cell).strip() in ['', 'nan', 'None'])
+        if empty_count >= len(row_list) * 0.6:  # 60% or more empty
+            patterns.append("mostly_empty")
+        
+        for cell in row_list:
+            cell_str = str(cell).strip()
+            
+            # Skip empty cells
+            if cell_str in ['', 'nan', 'None']:
+                continue
+            
+            # Check for year patterns (like "2007.0", "2015.0")
+            if cell_str.replace('.', '').replace('-', '').isdigit() and len(cell_str) >= 4:
+                patterns.append("year")
+            
+            # Check for company names (contains common business words)
+            business_words = ['GmbH', 'AG', 'Co', 'KG', 'Ltd', 'Inc', 'Corp']
+            if any(word in cell_str for word in business_words):
+                patterns.append("company")
+            
+            # Check for job descriptions (longer text, contains specific terms)
+            job_words = ['arbeiten', 'montage', 'technik', 'mechaniker', 'elektriker']
+            if any(word.lower() in cell_str.lower() for word in job_words):
+                patterns.append("job_desc")
+        
+        # If we found typical continuation patterns
+        return len(patterns) >= 1
+
+    def classify_table_enhanced(self, df: pd.DataFrame, previous_classification: str = None) -> str:
+        """Enhanced classification that handles table continuations"""
+        if df.empty or df.shape[0] < 1:
+            return "unknown"
+        
+        header = df.iloc[0].astype(str).str.strip().tolist()
+        
+        # First, try normal classification
+        for table_type, known_header in self.TABLE_TYPES.items():
+            if all(h in header for h in known_header):
+                return table_type
+        
+        # If unknown, check if it's a continuation
+        if self._looks_like_data_not_header(header):
+            # Enhanced logic for work_experience continuations
+            if previous_classification == "work_experience":
+                # Check for empty headers (common continuation pattern)
+                empty_count = sum(1 for cell in header if str(cell).strip() in ['', 'nan', 'None'])
+                if empty_count >= len(header) * 0.5:  # 50% or more empty
+                    return "work_experience"
+                
+                # Check for work-related content
+                work_patterns = any(
+                    word in ' '.join(header).lower() 
+                    for word in ['unternehmen', 'firma', 'gmbh', 'ag', 'arbeit', 'montage']
+                )
+                if work_patterns:
+                    return "work_experience"
+            
+            # Enhanced logic for education continuations  
+            if previous_classification == "education":
+                edu_patterns = any(
+                    word in ' '.join(header).lower() 
+                    for word in ['schule', 'ausbildung', 'studium', 'universität']
+                )
+                if edu_patterns:
+                    return "education"
+        
+        return "unknown" 
