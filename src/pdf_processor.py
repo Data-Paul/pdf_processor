@@ -12,8 +12,7 @@ class PDFProcessor:
     TABLE_TYPES = {
         "education": ["Beginn", "Ende", "Ausbildung", "Institution"],
         "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung", "Allg Beschreibung"],
-        "skills": ["Gruppe", "Name", "Einstufung"],
-        "traits": ["Name", "Familienname", "Geburstag", "Natinalität","Persönliche Eigenschaften","Erlernter Beruf", "Barcode"]
+        "skills": ["Gruppe", "Name", "Einstufung"]
     }
 
     def __init__(self, input_dir: str, output_dir: str):
@@ -95,25 +94,37 @@ class PDFProcessor:
                 return table_type
         return "unknown"
 
-    def is_personal_info_table(self, df: pd.DataFrame) -> bool:
-        """Check if table contains personal information headers"""
-        if df.empty or df.shape[0] < 1:
-            return False
-        header = df.iloc[0].astype(str).str.strip().tolist()
+    def is_traits_table(self, header: List[str]) -> bool:
+        """Check if table headers should go into traits.csv"""
+        self.logger.info(f"Checking if table is traits table. Headers: {header}")
         
-        # Check for personal info headers
-        personal_headers = ["Name", "Familienname", "Geburstag", "Natinalität"]
-        return all(h in header for h in personal_headers)
-
-    def is_occupation_table(self, df: pd.DataFrame) -> bool:
-        """Check if table contains occupation information"""
-        if df.empty or df.shape[0] < 1:
-            return False
-        header = df.iloc[0].astype(str).str.strip().tolist()
+        # Check for personal info headers - use correct spellings
+        personal_headers = ["Name", "Familienname", "Geburtsdatum", "Nationalität"]
+        personal_headers_lower = [h.lower() for h in personal_headers]
+        header_lower = [h.lower() for h in header]
         
+        # Check if at least 3 out of 4 personal headers are present
+        personal_matches = sum(1 for h in personal_headers_lower if any(h in header_h for header_h in header_lower))
+        if personal_matches >= 3:
+            self.logger.info(f"Table identified as personal info (matches: {personal_matches})")
+            return True
+            
         # Check for occupation headers
         occupation_headers = ["Erlernter Beruf", "Barcode"]
-        return any(h in header for h in occupation_headers)
+        occupation_headers_lower = [h.lower() for h in occupation_headers]
+        if any(h in header_lower for h in occupation_headers_lower):
+            self.logger.info("Table identified as occupation info")
+            return True
+            
+        # Check for traits headers
+        traits_headers = ["Persönliche Eigenschaften"]
+        traits_headers_lower = [h.lower() for h in traits_headers]
+        if any(h in header_lower for h in traits_headers_lower):
+            self.logger.info("Table identified as traits info")
+            return True
+            
+        self.logger.info("Table not identified as traits table")
+        return False
 
     def extract_trait_text_from_pdf(self, pdf_path: str) -> str:
         text_blob = ""
@@ -155,13 +166,20 @@ class PDFProcessor:
             previous_classification = None
             previous_table_type = None
 
-            for df in tables:
+            for i, df in enumerate(tables):
+                self.logger.info(f"Processing table {i+1}/{len(tables)}")
+                
+                # Get the original header before any processing
+                original_header = df.iloc[0].astype(str).str.strip().tolist()
+                self.logger.info(f"Original headers: {original_header}")
+                
                 table_type = self.classify_table_enhanced(df, previous_classification)
+                self.logger.info(f"Classified as: {table_type}")
                 
                 # Check if this is a continuation table
                 is_continuation = (table_type == previous_classification and 
                                  table_type in ["work_experience", "education"] and
-                                 self._looks_like_data_not_header(df.iloc[0].astype(str).str.strip().tolist()))
+                                 self._looks_like_data_not_header(original_header))
                 
                 if is_continuation:
                     # For continuation tables, DON'T set first row as headers
@@ -188,16 +206,15 @@ class PDFProcessor:
                     df.columns = df.iloc[0]
                     df = df[1:].copy()
 
-                # Special handling for personal info and occupation tables
-                if table_type == "unknown":
-                    if self.is_personal_info_table(df):
-                        table_store["traits"].append(df)
-                    elif self.is_occupation_table(df):
-                        table_store["traits"].append(df)
-                    else:
-                        # Only add to unknown if it's not personal info or occupation
-                        table_store["unknown"].append(df)
+                # Route all traits-related tables to traits.csv
+                if table_type == "unknown" and self.is_traits_table(original_header):
+                    self.logger.info("Routing to traits.csv")
+                    table_store["traits"].append(df)
+                elif table_type == "unknown":
+                    self.logger.info("Routing to unknown.csv")
+                    table_store["unknown"].append(df)
                 else:
+                    self.logger.info(f"Routing to {table_type}.csv")
                     table_store[table_type].append(df)
                 
                 previous_classification = table_type
