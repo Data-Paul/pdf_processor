@@ -10,13 +10,15 @@ def main():
         output_dir = os.getenv('OUTPUT_DIR', '/data/output')
         
         processor = PDFProcessor(input_dir, output_dir)
-        results = processor.process_all_pdfs()
+        results = processor.process_single_pdf()
         
         # Print results
-        for pdf_name, result in results.items():
-            print(f"Processing {pdf_name}: {result['status']}")
-            if result['status'] == 'error':
-                print(f"Error: {result['message']}")
+        if results:
+            print(f"Processing result: {results['status']}")
+            if results['status'] == 'error':
+                print(f"Error: {results['message']}")
+        else:
+            print("No PDF file found to process")
     else:
         # Run GUI version
         gui_main()

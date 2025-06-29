@@ -6,13 +6,14 @@ from collections import defaultdict
 from typing import List, Dict
 from datetime import datetime
 import logging
+import shutil
 
 class PDFProcessor:
     TABLE_TYPES = {
         "education": ["Beginn", "Ende", "Ausbildung", "Institution"],
         "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung", "Allg Beschreibung"],
         "skills": ["Gruppe", "Name", "Einstufung"],
-        "traits": ["Persönliche Eigenschaften"]
+        "traits": ["Name", "Familienname", "Geburstag", "Natinalität","Persönliche Eigenschaften","Erlernter Beruf", "Barcode"]
     }
 
     def __init__(self, input_dir: str, output_dir: str):
@@ -31,9 +32,30 @@ class PDFProcessor:
         )
         self.logger = logging.getLogger(__name__)
 
+    def clean_output_directory(self):
+        """Clean the output directory before processing"""
+        if os.path.exists(self.output_dir):
+            for file in os.listdir(self.output_dir):
+                file_path = os.path.join(self.output_dir, file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    self.logger.error(f"Error deleting {file_path}: {e}")
+
+    def get_single_pdf_file(self) -> str:
+        """Get the first PDF file from the input directory"""
+        pdf_files = [f for f in os.listdir(self.input_dir) if f.lower().endswith('.pdf')]
+        if pdf_files:
+            return pdf_files[0]
+        return None
+
     def flatten_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         # Convert all columns to string and apply the cleaning function
         for col in df.columns:
+            self.logger.info(f"Flattening column: {col}")
             df[col] = df[col].map(lambda x: str(x).replace('\n', ' ').strip() if isinstance(x, str) else x)
         return df
 
@@ -73,20 +95,25 @@ class PDFProcessor:
                 return table_type
         return "unknown"
 
-    def extract_logical_tables(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-        logical_tables = {}
-        headers = df.iloc[0].astype(str).str.strip().fillna("").tolist()
+    def is_personal_info_table(self, df: pd.DataFrame) -> bool:
+        """Check if table contains personal information headers"""
+        if df.empty or df.shape[0] < 1:
+            return False
+        header = df.iloc[0].astype(str).str.strip().tolist()
         
-        # Map both person types to person_info
-        if "Name" in headers and "Geburtsdatum" in headers:
-            logical_tables["person_info"] = df
-        elif "Erlernter Beruf" in headers or "Barcode" in headers:
-            logical_tables["person_info"] = df
-        elif "Persönliche Eigenschaften" in headers:
-            logical_tables["traits"] = df
-        else:
-            logical_tables["unknown"] = df
-        return logical_tables
+        # Check for personal info headers
+        personal_headers = ["Name", "Familienname", "Geburstag", "Natinalität"]
+        return all(h in header for h in personal_headers)
+
+    def is_occupation_table(self, df: pd.DataFrame) -> bool:
+        """Check if table contains occupation information"""
+        if df.empty or df.shape[0] < 1:
+            return False
+        header = df.iloc[0].astype(str).str.strip().tolist()
+        
+        # Check for occupation headers
+        occupation_headers = ["Erlernter Beruf", "Barcode"]
+        return any(h in header for h in occupation_headers)
 
     def extract_trait_text_from_pdf(self, pdf_path: str) -> str:
         text_blob = ""
@@ -109,13 +136,18 @@ class PDFProcessor:
             self.logger.error(f"Error extracting trait text from {pdf_path}: {str(e)}")
         return ""
 
-    def process_pdf(self, pdf_name: str) -> Dict[str, str]:
+    def process_single_pdf(self) -> Dict[str, str]:
+        """Process a single PDF file from the input directory"""
+        # Clean output directory first
+        self.clean_output_directory()
+        
+        # Get the PDF file
+        pdf_name = self.get_single_pdf_file()
+        if not pdf_name:
+            return None
+            
         try:
             pdf_path = os.path.join(self.input_dir, pdf_name)
-            person_name = self.safe_filename(os.path.splitext(pdf_name)[0].replace("_", " ").strip())
-            person_dir = os.path.join(self.output_dir, person_name)
-            os.makedirs(person_dir, exist_ok=True)
-
             tables = self.extract_tables_from_pdf(pdf_path)
             table_store: Dict[str, List[pd.DataFrame]] = defaultdict(list)
             generated_files = []
@@ -156,13 +188,15 @@ class PDFProcessor:
                     df.columns = df.iloc[0]
                     df = df[1:].copy()
 
+                # Special handling for personal info and occupation tables
                 if table_type == "unknown":
-                    logical_splits = self.extract_logical_tables(df)
-                    for subtype, subdf in logical_splits.items():
-                        if not is_continuation:  # Only set headers for non-continuation
-                            subdf.columns = subdf.iloc[0]
-                            subdf = subdf[1:].copy()
-                        table_store[subtype].append(subdf)
+                    if self.is_personal_info_table(df):
+                        table_store["traits"].append(df)
+                    elif self.is_occupation_table(df):
+                        table_store["traits"].append(df)
+                    else:
+                        # Only add to unknown if it's not personal info or occupation
+                        table_store["unknown"].append(df)
                 else:
                     table_store[table_type].append(df)
                 
@@ -170,30 +204,30 @@ class PDFProcessor:
                 if not is_continuation:
                     previous_table_type = table_type
 
+            # Save CSV files directly to output directory (no subfolders)
             for table_type, dfs in table_store.items():
                 if dfs:
                     combined = pd.concat(dfs, ignore_index=True)
                     combined = self.flatten_dataframe(combined)
-                    csv_path = os.path.join(person_dir, f"{table_type}.csv")
+                    csv_path = os.path.join(self.output_dir, f"{table_type}.csv")
                     combined.to_csv(csv_path, index=False, sep=";", encoding="utf-8-sig")
                     generated_files.append(f"{table_type}.csv")
 
+            # Handle traits text and add it to traits.csv
             trait_text = self.extract_trait_text_from_pdf(pdf_path)
             if trait_text:
-                trait_df = pd.DataFrame([{"text": trait_text}])
-                csv_path = os.path.join(person_dir, "traits.csv")
-                trait_df.to_csv(csv_path, index=False, sep=";", encoding="utf-8-sig")
-                generated_files.append("traits.csv")
-
-            readme_path = os.path.join(person_dir, "README.txt")
-            with open(readme_path, "w", encoding="utf-8") as f:
-                f.write("🧾 PDF-Profil-Export\n")
-                f.write("----------------------\n")
-                f.write(f"Source PDF: {pdf_name}\n")
-                f.write(f"Erstellt: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
-                f.write("Enthaltene CSV-Dateien:\n")
-                for file in generated_files:
-                    f.write(f"- {file}\n")
+                # If traits.csv already exists, add the text as a new column
+                traits_csv_path = os.path.join(self.output_dir, "traits.csv")
+                if os.path.exists(traits_csv_path):
+                    # Read existing traits.csv and add the text column
+                    existing_traits = pd.read_csv(traits_csv_path, sep=";", encoding="utf-8-sig")
+                    existing_traits["Persönliche Eigenschaften"] = trait_text
+                    existing_traits.to_csv(traits_csv_path, index=False, sep=";", encoding="utf-8-sig")
+                else:
+                    # Create new traits.csv with just the text
+                    trait_df = pd.DataFrame([{"Persönliche Eigenschaften": trait_text}])
+                    trait_df.to_csv(traits_csv_path, index=False, sep=";", encoding="utf-8-sig")
+                    generated_files.append("traits.csv")
 
             return {
                 "status": "success",
@@ -208,13 +242,6 @@ class PDFProcessor:
                 "message": f"Error processing {pdf_name}: {str(e)}",
                 "files": []
             }
-
-    def process_all_pdfs(self) -> Dict[str, Dict[str, str]]:
-        results = {}
-        for filename in os.listdir(self.input_dir):
-            if filename.endswith(".pdf"):
-                results[filename] = self.process_pdf(filename)
-        return results
 
     def _looks_like_data_not_header(self, row_list: List[str]) -> bool:
         """Detect if a 'header' row is actually data"""

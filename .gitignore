@@ -33,6 +33,7 @@ ENV/
 # Project specific
 input/
 output/
+tests/
 *.log
 *.spec
 *.exe
