@@ -37,7 +37,7 @@ class PDFProcessorGUI(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
         
-        # Fixed folder paths (placeholders)
+        # Fixed folder paths (placeholders/platzhalter)
         self.input_dir = "Profil_PDF"  # Fixed folder name
         self.output_dir = "Profil_CSV"  # Fixed folder name
         

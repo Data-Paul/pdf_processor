@@ -224,21 +224,42 @@ class PDFProcessor:
             # Save CSV files directly to output directory (no subfolders)
             for table_type, dfs in table_store.items():
                 if dfs:
-                    combined = pd.concat(dfs, ignore_index=True)
-                    combined = self.flatten_dataframe(combined)
-                    csv_path = os.path.join(self.output_dir, f"{table_type}.csv")
-                    combined.to_csv(csv_path, index=False, sep=";", encoding="utf-8-sig")
-                    generated_files.append(f"{table_type}.csv")
+                    if table_type == "traits":
+                        # Special handling for traits - merge all data into one row
+                        merged_traits = self.merge_traits_tables(dfs)
+                        merged_traits = self.flatten_dataframe(merged_traits)
+                        csv_path = os.path.join(self.output_dir, f"{table_type}.csv")
+                        merged_traits.to_csv(csv_path, index=False, sep=";", encoding="utf-8-sig")
+                        generated_files.append(f"{table_type}.csv")
+                    else:
+                        # Normal processing for other table types
+                        combined = pd.concat(dfs, ignore_index=True)
+                        combined = self.flatten_dataframe(combined)
+                        csv_path = os.path.join(self.output_dir, f"{table_type}.csv")
+                        combined.to_csv(csv_path, index=False, sep=";", encoding="utf-8-sig")
+                        generated_files.append(f"{table_type}.csv")
 
             # Handle traits text and add it to traits.csv
             trait_text = self.extract_trait_text_from_pdf(pdf_path)
             if trait_text:
-                # If traits.csv already exists, add the text as a new column
+                # If traits.csv already exists, merge the text into the existing row
                 traits_csv_path = os.path.join(self.output_dir, "traits.csv")
                 if os.path.exists(traits_csv_path):
-                    # Read existing traits.csv and add the text column
+                    # Read existing traits.csv
                     existing_traits = pd.read_csv(traits_csv_path, sep=";", encoding="utf-8-sig")
-                    existing_traits["Persönliche Eigenschaften"] = trait_text
+                    
+                    # If there's data in the first row, add the trait text to that row
+                    if not existing_traits.empty:
+                        # Find the first row with actual data (not empty)
+                        for idx, row in existing_traits.iterrows():
+                            if any(str(cell).strip() not in ['', 'nan', 'None'] for cell in row):
+                                # Add trait text to this row
+                                existing_traits.at[idx, "Persönliche Eigenschaften"] = trait_text
+                                break
+                        else:
+                            # If no data found, add to first row
+                            existing_traits.at[0, "Persönliche Eigenschaften"] = trait_text
+                    
                     existing_traits.to_csv(traits_csv_path, index=False, sep=";", encoding="utf-8-sig")
                 else:
                     # Create new traits.csv with just the text
@@ -332,3 +353,40 @@ class PDFProcessor:
                     return "education"
         
         return "unknown" 
+
+    def merge_traits_tables(self, dfs: List[pd.DataFrame]) -> pd.DataFrame:
+        """Merge multiple traits tables into a single row with all possible columns"""
+        if not dfs:
+            return pd.DataFrame()
+        
+        # Define all possible columns for traits
+        all_columns = ["Name", "Familienname", "Geburtsdatum", "Nationalität", 
+                       "Persönliche Eigenschaften", "Erlernter Beruf", "Barcode"]
+        
+        # Create a new dataframe with all possible columns
+        merged_df = pd.DataFrame(columns=all_columns)
+        
+        # Process each dataframe and merge data
+        for df in dfs:
+            if not df.empty:
+                # Get the first non-empty row from this dataframe
+                for idx, row in df.iterrows():
+                    if any(str(cell).strip() not in ['', 'nan', 'None'] for cell in row):
+                        # Merge this row's data into the merged dataframe
+                        for col in df.columns:
+                            if col in all_columns:
+                                # Only fill if the target cell is empty
+                                if merged_df.empty or str(merged_df.iloc[0][col]).strip() in ['', 'nan', 'None']:
+                                    if merged_df.empty:
+                                        # Create first row if it doesn't exist
+                                        merged_df = pd.DataFrame([{col: row[col]}], columns=all_columns)
+                                    else:
+                                        merged_df.iloc[0, merged_df.columns.get_loc(col)] = row[col]
+                        break
+        
+        # If we have no data, return empty dataframe
+        if merged_df.empty:
+            return pd.DataFrame(columns=all_columns)
+        
+        # Return only the first row (the merged row)
+        return merged_df.head(1) 
