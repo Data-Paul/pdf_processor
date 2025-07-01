@@ -22,7 +22,7 @@ class PDFProcessorThread(QThread):
             if results:
                 self.finished.emit(results)
             else:
-                self.error.emit("Keine PDF-Datei im Profil_PDF Ordner gefunden!")
+                self.error.emit("Keine PDF-Datei im Profil csv uebernommen Ordner gefunden!")
         except Exception as e:
             self.error.emit(str(e))
 
@@ -38,8 +38,8 @@ class PDFProcessorGUI(QMainWindow):
         layout = QVBoxLayout(central_widget)
         
         # Fixed folder paths (placeholders/platzhalter)
-        self.input_dir = r"C:\Users\paulh\Desktop\Codersbay\pdf_pro\pdf_processor\dist\Profil_PDF"  # Fixed folder name
-        self.output_dir = r"C:\Users\paulh\Desktop\Codersbay\pdf_pro\pdf_processor\dist\Profil_CSV"  # Fixed folder name
+        self.input_dir = r"O:\WorkExpert VERTRIEB\Profil pdf exportiert"  # Fixed folder name
+        self.output_dir = r"O:\WorkExpert VERTRIEB\Profil csv uebernommen"  # Fixed folder name
         
         # Status labels
         self.input_label = QLabel(f"Input Directory: {self.input_dir}")
