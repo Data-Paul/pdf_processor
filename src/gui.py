@@ -30,7 +30,7 @@ class PDFProcessorGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PDF Processor")
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 400, 200)
         
         # Create central widget and layout
         central_widget = QWidget()
@@ -38,8 +38,8 @@ class PDFProcessorGUI(QMainWindow):
         layout = QVBoxLayout(central_widget)
         
         # Fixed folder paths (placeholders/platzhalter)
-        self.input_dir = "Profil_PDF"  # Fixed folder name
-        self.output_dir = "Profil_CSV"  # Fixed folder name
+        self.input_dir = r"C:\Users\paulh\Desktop\Codersbay\pdf_pro\pdf_processor\dist\Profil_PDF"  # Fixed folder name
+        self.output_dir = r"C:\Users\paulh\Desktop\Codersbay\pdf_pro\pdf_processor\dist\Profil_CSV"  # Fixed folder name
         
         # Status labels
         self.input_label = QLabel(f"Input Directory: {self.input_dir}")
@@ -57,8 +57,6 @@ class PDFProcessorGUI(QMainWindow):
         self.status_label = QLabel("Bereit zur Verarbeitung")
         
         # Add widgets to layout
-        layout.addWidget(self.input_label)
-        layout.addWidget(self.output_label)
         layout.addWidget(self.process_button)
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.status_label)
