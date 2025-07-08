@@ -41,6 +41,12 @@ class PDFProcessorGUI(QMainWindow):
         self.input_dir = r"O:\WorkExpert VERTRIEB\Profil pdf exportiert"  # Fixed folder name
         self.output_dir = r"O:\WorkExpert VERTRIEB\Profil csv uebernommen"  # Fixed folder name
         
+        #test folders
+        self.input_dir = r"C:\Users\paulh\Desktop\Codersbay\pdf_pro\pdf_processor\dist\Profil_PDF"  # Fixed folder name
+        self.output_dir = r"C:\Users\paulh\Desktop\Codersbay\pdf_pro\pdf_processor\dist\Profil_CSV"  # Fixed folder name
+
+
+
         # Status labels
         self.input_label = QLabel(f"Input Directory: {self.input_dir}")
         self.output_label = QLabel(f"Output Directory: {self.output_dir}")

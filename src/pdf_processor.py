@@ -10,7 +10,7 @@ import shutil
 
 class PDFProcessor:
     TABLE_TYPES = {
-        "education": ["Beginn", "Ende", "Ausbildung", "Institution"],
+        "education": ["Beginn", "Ende", "Ausbildung", "Bezeichnung"],
         "work_experience": ["Beginn", "Ende", "Unternehmen", "Bezeichnung", "Allg Beschreibung"],
         "skills": ["Gruppe", "Name", "Einstufung"]
     }
@@ -99,7 +99,7 @@ class PDFProcessor:
         self.logger.info(f"Checking if table is traits table. Headers: {header}")
         
         # Check for personal info headers - use correct spellings
-        personal_headers = ["Name", "Familienname", "Geburtsdatum", "Nationalität"]
+        personal_headers = ["Name", "Familienname", "Geburtsdatum", "Nationalität", "Eingestellt als"]
         personal_headers_lower = [h.lower() for h in personal_headers]
         header_lower = [h.lower() for h in header]
         
